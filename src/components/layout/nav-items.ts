@@ -1,4 +1,4 @@
-import { BarChart3, Coins, LayoutDashboard, Settings, Swords, Users } from "lucide-react";
+import { BarChart3, Coins, LayoutDashboard, Receipt, Settings, Swords, Users } from "lucide-react";
 
 export interface NavItem {
   href: string;
@@ -14,6 +14,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/farms", label: "Farmlar", icon: Swords, mobile: true },
   { href: "/drops", label: "Droplar", icon: Coins, mobile: true },
   { href: "/earnings", label: "Kazançlar", icon: BarChart3, mobile: true },
+  // Mobil alt menü beş sütuna sabit olduğu için burada mobile: false.
+  { href: "/payments", label: "Ödemeler", icon: Receipt, mobile: false },
   { href: "/users", label: "Üyeler", icon: Users, mobile: false },
   { href: "/settings", label: "Ayarlar", icon: Settings, mobile: true },
 ];

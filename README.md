@@ -48,6 +48,7 @@ src/
 │  │  ├─ farms/[id]/           # Farm detayı: droplar, pay dağıtımı, notlar
 │  │  ├─ drops/                # Tüm droplar
 │  │  ├─ earnings/             # Kişisel ve klan kazançları
+│  │  ├─ payments/             # Ödeme geçmişi (üye kendi kayıtlarını görür)
 │  │  ├─ users/                # Üye yönetimi
 │  │  └─ settings/             # Profil + klan ayarları
 │  └─ api/discord/route.ts     # Webhook'u sunucudan gönderen uç nokta

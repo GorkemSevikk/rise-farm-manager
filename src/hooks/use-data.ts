@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { subscribeFarm, subscribeFarms, subscribeParticipants } from "@/services/farms";
 import { subscribeDrops, subscribeFarmDrops } from "@/services/drops";
 import { subscribeUsers } from "@/services/users";
-import { subscribePayments } from "@/services/payments";
+import { subscribePayments, subscribeUserPayments } from "@/services/payments";
 import { subscribeSettings } from "@/services/settings";
 import { DEFAULT_SETTINGS } from "@/lib/constants";
 import { useAuth } from "@/hooks/use-auth";
@@ -121,6 +121,25 @@ export function usePayments() {
     (onData, onError) => subscribePayments(onData, onError),
     [],
     Boolean(isAuthenticated && isAdmin)
+  );
+}
+
+/**
+ * Ödeme geçmişi. Yönetici tüm kayıtları, üye yalnızca kendi kayıtlarını görür;
+ * bu ayrım güvenlik kurallarıyla da zorunlu kılınmıştır.
+ */
+export function usePaymentHistory() {
+  const { isAuthenticated, isAdmin, profile } = useAuth();
+  const uid = profile?.uid ?? "";
+
+  return useSubscription<Payment[]>(
+    [],
+    (onData, onError) =>
+      isAdmin
+        ? subscribePayments(onData, onError)
+        : subscribeUserPayments(uid, onData, onError),
+    [isAdmin, uid],
+    Boolean(isAuthenticated && (isAdmin || uid))
   );
 }
 

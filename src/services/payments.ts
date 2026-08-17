@@ -43,6 +43,38 @@ export function subscribePayments(
   );
 }
 
+/**
+ * Tek bir oyuncunun ödeme kayıtları.
+ *
+ * Güvenlik kuralları üyelerin yalnızca kendi kayıtlarını okumasına izin
+ * verdiği için sorgu userId filtresi içermek zorundadır. Sıralama istemcide
+ * yapılır; böylece bileşik indeks gerekmez.
+ */
+export function subscribeUserPayments(
+  userId: string,
+  callback: (payments: Payment[]) => void,
+  onError?: (error: Error) => void
+) {
+  if (isDemoMode) {
+    return demoSubscribe(
+      () => demoPayments().filter((payment) => payment.userId === userId),
+      callback
+    );
+  }
+
+  const paymentsQuery = query(paymentsCollection(), where("userId", "==", userId));
+  return onSnapshot(
+    paymentsQuery,
+    (snapshot) =>
+      callback(
+        snapshot.docs
+          .map((docSnapshot) => docSnapshot.data())
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      ),
+    (error) => onError?.(error)
+  );
+}
+
 /** Ödeme kaydı kimliği: aynı farm + oyuncu için tek kayıt tutulur. */
 export function paymentId(farmId: string, userId: string) {
   return `${farmId}_${userId}`;
