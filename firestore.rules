@@ -1,0 +1,133 @@
+rules_version = '2';
+
+// Rise Farm Manager - Firestore güvenlik kuralları
+//
+// Genel yaklaşım:
+//  - Oturum açmayan hiç kimse hiçbir veriyi göremez.
+//  - Klan üyeleri tüm farm/drop/kazanç verilerini okuyabilir (şeffaflık).
+//  - Yazma işlemleri yöneticilere aittir; üyeler yalnızca drop ekleyebilir ve
+//    bu işlemin tetiklediği toplam alanlarını güncelleyebilir.
+//  - Kimse kendi rolünü yükseltemez.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- yardımcılar
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).data.role == 'admin';
+    }
+
+    function isActiveMember() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).data.active == true;
+    }
+
+    // Kurulum sırasında yönetici olacak e-postalar.
+    // NEXT_PUBLIC_BOOTSTRAP_ADMIN_EMAILS ile aynı listeyi buraya da yazın.
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.email in [
+          'ornek@gmail.com'
+        ];
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Üyelerin drop ekledikten sonra güncelleyebileceği toplam alanları
+    function onlyAggregateFields() {
+      return changedKeys().hasOnly([
+        'grossGold', 'expenseGold', 'netGold', 'dropCount',
+        'shares', 'participantIds', 'participantCount', 'updatedAt'
+      ]);
+    }
+
+    // ---------------------------------------------------------------- users
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+
+      // İlk giriş: kullanıcı yalnızca kendi dokümanını oluşturabilir.
+      // Rol ya 'member' olmalı ya da e-posta kurulum listesinde bulunmalı.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role in ['member', 'admin']
+        && (request.resource.data.role == 'member' || isBootstrapAdmin())
+        && request.resource.data.active == true;
+
+      // Kendi profilini güncelleyebilir ama rol/aktiflik alanlarına dokunamaz.
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && request.auth.uid == userId
+            && changedKeys().hasOnly([
+              'displayName', 'email', 'photoURL', 'nickname',
+              'characterClass', 'server', 'discord', 'updatedAt'
+            ]));
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------- farms
+
+    match /farms/{farmId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+
+      // Yönetici her alanı; aktif üye yalnızca hesaplanan toplamları güncelleyebilir.
+      allow update: if isAdmin() || (isActiveMember() && onlyAggregateFields());
+
+      match /farmParticipants/{participantId} {
+        allow read: if isSignedIn();
+        allow create, delete: if isAdmin();
+
+        // Üyenin drop eklemesi payları yeniden hesaplar; yalnızca shareGold değişebilir.
+        allow update: if isAdmin()
+          || (isActiveMember() && changedKeys().hasOnly(['shareGold']));
+      }
+    }
+
+    // ---------------------------------------------------------------- drops
+
+    match /drops/{dropId} {
+      allow read: if isSignedIn();
+
+      // Aktif üyeler drop ekleyebilir; kayıt kendi adına oluşturulmak zorunda.
+      allow create: if isActiveMember()
+        && request.resource.data.addedBy == request.auth.uid
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.estimatedValue >= 0;
+
+      // Kendi eklediği dropu düzeltebilir; yönetici hepsini yönetir.
+      allow update, delete: if isAdmin()
+        || (isActiveMember() && resource.data.addedBy == request.auth.uid);
+    }
+
+    // ---------------------------------------------------------------- payments
+
+    match /payments/{paymentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------- settings
+
+    match /settings/{docId} {
+      // 'secrets' dokümanı Discord webhook adresini tutar: yalnızca yönetici.
+      allow read: if docId == 'secrets' ? isAdmin() : isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}

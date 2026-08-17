@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Drop ekran görüntüleri: yalnızca oturum açmış klan üyeleri erişebilir.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    match /drops/{farmId}/{fileName} {
+      allow read: if isSignedIn();
+
+      // En fazla 5 MB ve yalnızca görsel yüklenebilir.
+      allow create: if isSignedIn()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow delete: if isSignedIn();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
