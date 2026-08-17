@@ -18,6 +18,7 @@ import { isDemoMode } from "@/lib/demo/mode";
 import {
   demoCurrentUser,
   demoSetUserActive,
+  demoSetUserApproved,
   demoSetUserRole,
   demoSubscribe,
   demoUpdateProfile,
@@ -54,8 +55,10 @@ export async function ensureUserProfile(user: User): Promise<AppUser> {
 
   if (!snapshot.exists()) {
     // Kurulum sırasında NEXT_PUBLIC_BOOTSTRAP_ADMIN_EMAILS içinde tanımlanan
-    // e-postalar doğrudan yönetici olur; diğer herkes üye olarak başlar.
-    const role: UserRole = isBootstrapAdmin(user.email) ? "admin" : "member";
+    // e-postalar doğrudan yönetici olur ve onay beklemez. Diğer herkes onay
+    // bekleyen üye olarak başlar; yönetici onaylamadan hiçbir veriye erişemez.
+    const bootstrap = isBootstrapAdmin(user.email);
+    const role: UserRole = bootstrap ? "admin" : "member";
 
     await setDoc(doc(db, COLLECTIONS.users, user.uid), {
       displayName: user.displayName ?? "İsimsiz oyuncu",
@@ -66,6 +69,7 @@ export async function ensureUserProfile(user: User): Promise<AppUser> {
       server: "",
       discord: "",
       role,
+      approved: bootstrap,
       active: true,
       joinedAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -141,6 +145,19 @@ export async function setUserRole(uid: string, role: UserRole) {
 
   await updateDoc(doc(db, COLLECTIONS.users, uid), {
     role,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Onay bekleyen bir kullanıcıyı klana kabul eder veya onayı geri alır. */
+export async function setUserApproved(uid: string, approved: boolean) {
+  if (isDemoMode) {
+    demoSetUserApproved(uid, approved);
+    return;
+  }
+
+  await updateDoc(doc(db, COLLECTIONS.users, uid), {
+    approved,
     updatedAt: serverTimestamp(),
   });
 }

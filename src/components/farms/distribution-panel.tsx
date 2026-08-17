@@ -47,7 +47,9 @@ interface DistributionPanelProps {
 }
 
 export function DistributionPanel({ farm, participants, users }: DistributionPanelProps) {
-  const { profile, isAdmin } = useAuth();
+  // Yardımcı payları düzenleyip katılımcı ekleyebilir; para el değiştirdiğini
+  // beyan eden ödeme işaretlemesi ise yalnızca yöneticide kalır.
+  const { profile, isAdmin, canManage } = useAuth();
   const [percents, setPercents] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -167,7 +169,7 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
           </span>
         </div>
 
-        {isAdmin && (
+        {canManage && (
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
               <UserPlus className="size-3.5" />
@@ -186,15 +188,17 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
               {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
               Payları kaydet
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleMarkAllPaid}
-              disabled={saving || participants.length === 0 || paidCount === participants.length}
-            >
-              <BadgeCheck className="size-3.5" />
-              Tümünü ödendi yap
-            </Button>
+            {isAdmin && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleMarkAllPaid}
+                disabled={saving || participants.length === 0 || paidCount === participants.length}
+              >
+                <BadgeCheck className="size-3.5" />
+                Tümünü ödendi yap
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -208,7 +212,7 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
               <TableHead className="w-28 text-right">Pay</TableHead>
               <TableHead className="text-right">Tutar</TableHead>
               <TableHead>Ödeme</TableHead>
-              {isAdmin && <TableHead className="w-24" />}
+              {canManage && <TableHead className="w-24" />}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -243,7 +247,7 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
                   </TableCell>
 
                   <TableCell className="text-right">
-                    {isAdmin ? (
+                    {canManage ? (
                       <div className="relative ml-auto w-24">
                         <Input
                           type="number"
@@ -278,27 +282,29 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
                     <PaymentStatusBadge status={participant.paymentStatus} />
                   </TableCell>
 
-                  {isAdmin && (
+                  {canManage && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleTogglePayment(participant)}
-                          disabled={busyUserId === participant.userId}
-                          aria-label="Ödeme durumunu değiştir"
-                          title={
-                            participant.paymentStatus === "paid"
-                              ? "Beklemeye al"
-                              : "Ödendi olarak işaretle"
-                          }
-                        >
-                          {busyUserId === participant.userId ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : (
-                            <Wallet className="size-4" />
-                          )}
-                        </Button>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => handleTogglePayment(participant)}
+                            disabled={busyUserId === participant.userId}
+                            aria-label="Ödeme durumunu değiştir"
+                            title={
+                              participant.paymentStatus === "paid"
+                                ? "Beklemeye al"
+                                : "Ödendi olarak işaretle"
+                            }
+                          >
+                            {busyUserId === participant.userId ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Wallet className="size-4" />
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -318,7 +324,7 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
         </Table>
       </div>
 
-      {!percentValid && isAdmin && (
+      {!percentValid && canManage && (
         <p className="text-xs text-destructive">
           Pay yüzdelerinin toplamı %100 değil. Kaydetsen bile dağıtım oransal yapılır; net sonuç
           için toplamı %100&apos;e tamamla.
@@ -330,7 +336,10 @@ export function DistributionPanel({ farm, participants, users }: DistributionPan
         onOpenChange={setAddOpen}
         farm={farm}
         users={users.filter(
-          (user) => user.active && !participants.some((item) => item.userId === user.uid)
+          (user) =>
+            user.approved &&
+            user.active &&
+            !participants.some((item) => item.userId === user.uid)
         )}
       />
     </div>

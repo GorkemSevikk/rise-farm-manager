@@ -56,7 +56,7 @@ export function DropsTable({
   onEdit,
   lockedFarmIds,
 }: DropsTableProps) {
-  const { profile, isAdmin } = useAuth();
+  const { canManage } = useAuth();
   const [pendingDelete, setPendingDelete] = useState<Drop | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -95,7 +95,8 @@ export function DropsTable({
           <TableBody>
             {drops.map((drop) => {
               const farmLocked = lockedFarmIds?.has(drop.farmId) ?? false;
-              const canManage = !farmLocked && (isAdmin || drop.addedBy === profile?.uid);
+              // Yalnızca yönetici ve yardımcı drop düzenleyip silebilir.
+              const rowEditable = !farmLocked && canManage;
               const unit = drop.soldPrice ?? drop.estimatedValue;
 
               return (
@@ -157,7 +158,7 @@ export function DropsTable({
                   </TableCell>
 
                   <TableCell>
-                    {canManage && (
+                    {rowEditable && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon-sm" aria-label="İşlemler">

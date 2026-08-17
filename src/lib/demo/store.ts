@@ -151,6 +151,11 @@ export function demoSetUserActive(uid: string, active: boolean) {
   emit();
 }
 
+export function demoSetUserApproved(uid: string, approved: boolean) {
+  state.users = state.users.map((user) => (user.uid === uid ? { ...user, approved } : user));
+  emit();
+}
+
 export function demoCreateFarm(
   input: Omit<Farm, "id" | "createdAt" | "updatedAt" | "shares" | "participantIds" | "participantCount" | "grossGold" | "expenseGold" | "netGold" | "dropCount" | "createdBy" | "createdByName">,
   participants: { user: AppUser; sharePercent: number }[],
@@ -481,11 +486,13 @@ function createInitialState(): DemoState {
 
   const users: AppUser[] = [
     demoUser("demo-1", "Görkem Yılmaz", "Rise", "Savaşçı", "gorkem#1234", "admin"),
-    demoUser("demo-2", "Ahmet Kaya", "AhmetPro", "Okçu", "ahmet#2201"),
+    demoUser("demo-2", "Ahmet Kaya", "AhmetPro", "Okçu", "ahmet#2201", "moderator"),
     demoUser("demo-3", "Mehmet Demir", "MehmetX", "Büyücü", "mehmet#7788"),
     demoUser("demo-4", "Ali Şahin", "AliRise", "Rahip", ""),
     demoUser("demo-5", "Can Aydın", "CanTheKing", "Suikastçı", "can#0451"),
     demoUser("demo-6", "Elif Yorulmaz", "ElifHeal", "Rahip", "elif#5150"),
+    // Onay kuyruğunu göstermek için henüz onaylanmamış bir başvuru.
+    demoUser("demo-7", "Burak Çetin", "BurakNew", "Savaşçı", "", "member", false),
   ];
 
   const state: DemoState = {
@@ -775,7 +782,8 @@ function demoUser(
   nickname: string,
   characterClass: string,
   discord: string,
-  role: UserRole = "member"
+  role: UserRole = "member",
+  approved = true
 ): AppUser {
   return {
     uid,
@@ -787,6 +795,7 @@ function demoUser(
     server: "Elysium",
     discord,
     role,
+    approved,
     active: true,
     joinedAt: daysAgo(90),
     updatedAt: daysAgo(10),

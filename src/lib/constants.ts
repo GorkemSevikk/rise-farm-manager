@@ -79,7 +79,14 @@ export const DROP_STATUS_LABELS: Record<DropStatus, string> = {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Yönetici",
+  moderator: "Yardımcı",
   member: "Üye",
+};
+
+export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
+  admin: "Her yetkiye sahip: üye onaylar, rol verir, ödeme işaretler, ayarları değiştirir.",
+  moderator: "Farm ve drop işlemlerini yapabilir. Üye yönetimi, ödeme ve ayarlar kapalıdır.",
+  member: "Hiçbir kayıt ekleyemez veya değiştiremez; yalnızca kendi payını izler.",
 };
 
 export const CHART_COLORS = [

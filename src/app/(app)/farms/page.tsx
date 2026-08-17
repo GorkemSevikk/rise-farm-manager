@@ -10,7 +10,7 @@ import { formatGold, formatShortDate, initialsOf } from "@/lib/format";
 import { FARM_STATUS_LABELS } from "@/lib/constants";
 import { PageHeader } from "@/components/common/page-header";
 import { EmptyState } from "@/components/common/empty-state";
-import { FarmStatusBadge } from "@/components/common/status-badge";
+import { FarmStatusBadge, PaymentStatusBadge } from "@/components/common/status-badge";
 import { FarmFormDialog } from "@/components/farms/farm-form-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import type { FarmStatus } from "@/types";
 const ALL = "all";
 
 export default function FarmsPage() {
-  const { isAdmin } = useAuth();
+  const { canManage, profile } = useAuth();
   const { data: farms, loading, error } = useFarms();
   const { data: users } = useUsers();
 
@@ -80,9 +80,13 @@ export default function FarmsPage() {
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
         title="Farmlar"
-        description="Tüm farm seansları, katılımcıları ve gelirleri."
+        description={
+          canManage
+            ? "Tüm farm seansları, katılımcıları ve gelirleri."
+            : "Katıldığın farmlar ve senin payın. Başka oyuncuların kazancı görünmez."
+        }
         actions={
-          isAdmin && (
+          canManage && (
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="size-4" />
               Yeni farm
@@ -117,6 +121,7 @@ export default function FarmsPage() {
             </SelectContent>
           </Select>
 
+          {canManage && (
           <Select value={player} onValueChange={setPlayer}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Oyuncu" />
@@ -130,6 +135,7 @@ export default function FarmsPage() {
               ))}
             </SelectContent>
           </Select>
+          )}
 
           <Select value={month} onValueChange={setMonth}>
             <SelectTrigger className="w-full">
@@ -152,7 +158,16 @@ export default function FarmsPage() {
           <Filter className="size-3.5" />
           {filtered.length} farm listeleniyor
         </span>
-        <span className="text-primary">Toplam gelir: {formatGold(totalGold)}</span>
+        <span className="text-primary">
+          {canManage
+            ? `Toplam gelir: ${formatGold(totalGold)}`
+            : `Senin payın: ${formatGold(
+                filtered.reduce((sum, farm) => {
+                  const share = farm.shares.find((item) => item.userId === profile?.uid);
+                  return sum + (share?.shareGold ?? 0);
+                }, 0)
+              )}`}
+        </span>
       </div>
 
       {error && (
@@ -177,7 +192,7 @@ export default function FarmsPage() {
               : "Filtrelere uyan farm yok. Filtreleri temizlemeyi dene."
           }
           action={
-            isAdmin && farms.length === 0 ? (
+            canManage && farms.length === 0 ? (
               <Button onClick={() => setDialogOpen(true)} size="sm">
                 <Plus className="size-4" />
                 İlk farmı oluştur
@@ -210,16 +225,38 @@ export default function FarmsPage() {
                   </div>
 
                   <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2">
-                    <div>
-                      <p className="text-[11px] text-muted-foreground uppercase">Brüt gelir</p>
-                      <p className="font-mono text-sm text-primary">{formatGold(farm.grossGold)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-muted-foreground uppercase">Drop</p>
-                      <p className="font-mono text-sm">{farm.dropCount}</p>
-                    </div>
+                    {canManage ? (
+                      <>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground uppercase">Brüt gelir</p>
+                          <p className="font-mono text-sm text-primary">{formatGold(farm.grossGold)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] text-muted-foreground uppercase">Drop</p>
+                          <p className="font-mono text-sm">{farm.dropCount}</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground uppercase">Senin payın</p>
+                          <p className="font-mono text-sm text-primary">
+                            {formatGold(
+                              farm.shares.find((item) => item.userId === profile?.uid)?.shareGold ?? 0
+                            )}
+                          </p>
+                        </div>
+                        <PaymentStatusBadge
+                          status={
+                            farm.shares.find((item) => item.userId === profile?.uid)?.paymentStatus ??
+                            "pending"
+                          }
+                        />
+                      </>
+                    )}
                   </div>
 
+                  {canManage && (
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex -space-x-2">
                       {farm.shares.slice(0, 5).map((share) => (
@@ -241,6 +278,7 @@ export default function FarmsPage() {
                       {farm.participantCount}
                     </span>
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </Link>

@@ -30,7 +30,7 @@ import { formatDate, formatGold, formatPercent } from "@/lib/format";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
-import { FarmStatusBadge } from "@/components/common/status-badge";
+import { FarmStatusBadge, PaymentStatusBadge } from "@/components/common/status-badge";
 import { FarmFormDialog } from "@/components/farms/farm-form-dialog";
 import { DistributionPanel } from "@/components/farms/distribution-panel";
 import { DropFormDialog } from "@/components/drops/drop-form-dialog";
@@ -62,7 +62,7 @@ export default function FarmDetailPage() {
   const farmId = params?.id ?? "";
   const router = useRouter();
 
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, canManage } = useAuth();
   const { data: farm, loading } = useFarm(farmId);
   const { data: participants } = useParticipants(farmId);
   const { data: drops, loading: dropsLoading } = useFarmDrops(farmId);
@@ -141,6 +141,83 @@ export default function FarmDetailPage() {
     setDropOpen(true);
   }
 
+  if (!canManage) {
+    const myShare = farm.shares.find((item) => item.userId === profile?.uid);
+
+    return (
+      <div className="mx-auto w-full max-w-3xl">
+        <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
+          <Link href="/farms">
+            <ArrowLeft className="size-4" />
+            Farmlar
+          </Link>
+        </Button>
+
+        <PageHeader
+          title={farm.title}
+          description={`${formatDate(farm.date)} · ${farm.mapName || "Harita belirtilmemiş"}`}
+        />
+
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <FarmStatusBadge status={farm.status} />
+          {(farm.startTime || farm.endTime) && (
+            <span className="flex items-center gap-1.5">
+              <Clock className="size-3.5" />
+              {farm.startTime || "?"} - {farm.endTime || "?"}
+            </span>
+          )}
+        </div>
+
+        <div className="mb-5 grid gap-3 sm:grid-cols-2">
+          <StatCard
+            label="Senin payın"
+            value={formatGold(myShare?.shareGold ?? 0)}
+            hint={myShare ? `%${myShare.sharePercent}` : "Bu farma kayıtlı değilsin"}
+            icon={Coins}
+            tone="gold"
+          />
+          <StatCard
+            label="Ödeme"
+            value={myShare?.paymentStatus === "paid" ? "Ödendi" : "Bekliyor"}
+            icon={Wallet}
+            tone={myShare?.paymentStatus === "paid" ? "green" : "violet"}
+          />
+        </div>
+
+        {myShare && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Payın
+                <PaymentStatusBadge status={myShare.paymentStatus} />
+              </CardTitle>
+              <CardDescription>
+                Bu seansta sana düşen tutar. Diğer oyuncuların payları gösterilmez.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="font-mono text-2xl text-primary">{formatGold(myShare.shareGold)}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {farm.notes && (
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <StickyNote className="size-4 text-muted-foreground" />
+                Seans notları
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm whitespace-pre-wrap text-muted-foreground">{farm.notes}</p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl">
       <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
@@ -154,20 +231,20 @@ export default function FarmDetailPage() {
         title={farm.title}
         description={`${formatDate(farm.date)} · Oluşturan: ${farm.createdByName || "-"}`}
         actions={
-          <>
-            <Button
-              onClick={openCreateDrop}
-              disabled={locked}
-              title={
-                locked
-                  ? "Ödemesi tamamlanan farma drop eklenemez. Önce bir ödemeyi geri alın."
-                  : undefined
-              }
-            >
-              <Plus className="size-4" />
-              Drop ekle
-            </Button>
-            {isAdmin && (
+          canManage && (
+            <>
+              <Button
+                onClick={openCreateDrop}
+                disabled={locked}
+                title={
+                  locked
+                    ? "Ödemesi tamamlanan farma drop eklenemez. Önce bir ödemeyi geri alın."
+                    : undefined
+                }
+              >
+                <Plus className="size-4" />
+                Drop ekle
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon" aria-label="Farm işlemleri">
@@ -179,14 +256,18 @@ export default function FarmDetailPage() {
                     <Pencil className="size-4" />
                     Farmı düzenle
                   </DropdownMenuItem>
-                  <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
-                    <Trash2 className="size-4" />
-                    Farmı sil
-                  </DropdownMenuItem>
+                  {/* Farm silmek geri alınamaz ve tüm ödeme geçmişini götürür;
+                      bu yüzden yalnızca yöneticiye açıktır. */}
+                  {isAdmin && (
+                    <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
+                      <Trash2 className="size-4" />
+                      Farmı sil
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
-          </>
+            </>
+          )
         }
       />
 
@@ -262,12 +343,18 @@ export default function FarmDetailPage() {
             <EmptyState
               icon={Package}
               title="Bu farmda henüz drop yok"
-              description="Seans sırasında düşen itemleri ekle; toplamlar ve paylar anında güncellenir."
+              description={
+                canManage
+                  ? "Seans sırasında düşen itemleri ekle; toplamlar ve paylar anında güncellenir."
+                  : "Seansta düşen itemler eklendiğinde burada listelenir."
+              }
               action={
-                <Button size="sm" onClick={openCreateDrop} disabled={locked}>
-                  <Plus className="size-4" />
-                  İlk dropu ekle
-                </Button>
+                canManage ? (
+                  <Button size="sm" onClick={openCreateDrop} disabled={locked}>
+                    <Plus className="size-4" />
+                    İlk dropu ekle
+                  </Button>
+                ) : undefined
               }
             />
           ) : (

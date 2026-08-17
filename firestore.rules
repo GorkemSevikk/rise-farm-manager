@@ -2,12 +2,18 @@ rules_version = '2';
 
 // Rise Farm Manager - Firestore güvenlik kuralları
 //
-// Genel yaklaşım:
-//  - Oturum açmayan hiç kimse hiçbir veriyi göremez.
-//  - Klan üyeleri tüm farm/drop/kazanç verilerini okuyabilir (şeffaflık).
-//  - Yazma işlemleri yöneticilere aittir; üyeler yalnızca drop ekleyebilir ve
-//    bu işlemin tetiklediği toplam alanlarını güncelleyebilir.
-//  - Kimse kendi rolünü yükseltemez.
+// Yetki modeli:
+//  - admin      : her şeyi yapar; üye onaylar, rol verir, ödeme işaretler, siler.
+//  - moderator  : farm ve drop işlemlerini yürütür (yönetici yokken).
+//  - member     : hiçbir kayıt oluşturamaz veya değiştiremez; yalnızca okur.
+//
+// Erişim şartı: kullanıcı dokümanı var + approved == true + active == true.
+// Onay bekleyen ve askıya alınmış hesaplar hiçbir veriyi göremez.
+//
+// Kritik not: pay hesabı (shares/shareGold) tarayıcıda yapılıyor. Bu yüzden
+// farm dokümanlarına yazma yetkisi yalnızca güvenilen rollere (admin, moderator)
+// verilir. Üyelerin yazma yetkisi tamamen kapalı olduğu için kimse kendi payını
+// yükseltemez.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -17,20 +23,34 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userDoc(uid) {
-      return get(/databases/$(database)/documents/users/$(uid));
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasProfile() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Onaylanmış ve askıya alınmamış hesap. Alanı olmayan eski kayıtlar
+    // onaylı sayılır (approved != false), böylece mevcut üyeler kilitlenmez.
+    function hasAccess() {
+      return hasProfile()
+        && userData().approved != false
+        && userData().active == true;
+    }
+
+    function role() {
+      return userData().role;
     }
 
     function isAdmin() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc(request.auth.uid).data.role == 'admin';
+      return hasAccess() && role() == 'admin';
     }
 
-    function isActiveMember() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc(request.auth.uid).data.active == true;
+    // Yönetici veya yardımcı: kayıt oluşturup değiştirebilen roller.
+    function canManage() {
+      return hasAccess() && (role() == 'admin' || role() == 'moderator');
     }
 
     // Kurulum sırasında yönetici olacak e-postalar.
@@ -46,29 +66,31 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys();
     }
 
-    // Üyelerin drop ekledikten sonra güncelleyebileceği toplam alanları
-    function onlyAggregateFields() {
-      return changedKeys().hasOnly([
-        'grossGold', 'expenseGold', 'netGold', 'dropCount',
-        'shares', 'participantIds', 'participantCount', 'updatedAt'
-      ]);
-    }
-
     // ---------------------------------------------------------------- users
 
     match /users/{userId} {
-      allow read: if isSignedIn();
+      // Kendi profilini her zaman okuyabilir (onay bekleyen kullanıcı
+      // "onay bekleniyor" ekranını görsün diye). Üye listesi yalnızca
+      // yönetici ve yardımcıya açıktır; aksi halde herkes kimin ne
+      // kazandığını üye sayfasından çıkarabilir.
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || canManage());
 
-      // İlk giriş: kullanıcı yalnızca kendi dokümanını oluşturabilir.
-      // Rol ya 'member' olmalı ya da e-posta kurulum listesinde bulunmalı.
+      // İlk giriş: kullanıcı yalnızca kendi dokümanını oluşturabilir ve
+      // kendini onaylayamaz. Yalnızca kurulum listesindeki e-posta doğrudan
+      // yönetici ve onaylı olarak başlar.
       allow create: if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.role in ['member', 'admin']
-        && (request.resource.data.role == 'member' || isBootstrapAdmin())
-        && request.resource.data.active == true;
+        && request.resource.data.active == true
+        && (isBootstrapAdmin()
+            ? (request.resource.data.role == 'admin'
+               && request.resource.data.approved == true)
+            : (request.resource.data.role == 'member'
+               && request.resource.data.approved == false));
 
-      // Kendi profilini güncelleyebilir ama rol/aktiflik alanlarına dokunamaz.
-      allow update: if isAdmin()
+      // Rol, onay ve aktiflik yalnızca yöneticide. Kullanıcı kendi profil
+      // bilgilerini düzenleyebilir ama bu alanlara dokunamaz.
+      allow update: if (isAdmin() && request.resource.data.role in ['admin', 'moderator', 'member'])
         || (isSignedIn()
             && request.auth.uid == userId
             && changedKeys().hasOnly([
@@ -82,29 +104,29 @@ service cloud.firestore {
     // ---------------------------------------------------------------- farms
 
     match /farms/{farmId} {
-      allow read: if isSignedIn();
-      allow create, delete: if isAdmin();
-
-      // Yönetici her alanı; aktif üye yalnızca hesaplanan toplamları güncelleyebilir.
-      allow update: if isAdmin() || (isActiveMember() && onlyAggregateFields());
+      // Yönetici ve yardımcı tüm farmları görür. Üye yalnızca katıldığı
+      // farmları okuyabilir (sorgular array-contains ile kısıtlanmalı).
+      allow read: if canManage()
+        || (hasAccess() && request.auth.uid in resource.data.participantIds);
+      allow create, update: if canManage();
+      // Farm silmek tüm drop ve ödeme geçmişini götürür: yalnızca yönetici.
+      allow delete: if isAdmin();
 
       match /farmParticipants/{participantId} {
-        allow read: if isSignedIn();
-        allow create, delete: if isAdmin();
-
-        // Üyenin drop eklemesi payları yeniden hesaplar; yalnızca shareGold değişebilir.
-        allow update: if isAdmin()
-          || (isActiveMember() && changedKeys().hasOnly(['shareGold']));
+        allow read: if canManage()
+          || (hasAccess() && request.auth.uid == participantId);
+        allow create, update, delete: if canManage();
       }
     }
 
     // ---------------------------------------------------------------- drops
 
     match /drops/{dropId} {
-      allow read: if isSignedIn();
+      // Drop listesi klanın toplam gelirini ifşa eder; yalnızca kayıt
+      // girebilen roller okuyabilir.
+      allow read: if canManage();
 
-      // Aktif üyeler drop ekleyebilir; kayıt kendi adına oluşturulmak zorunda.
-      allow create: if isActiveMember()
+      allow create: if canManage()
         && request.resource.data.addedBy == request.auth.uid
         && request.resource.data.farmId is string
         && request.resource.data.farmId.size() > 0
@@ -118,34 +140,37 @@ service cloud.firestore {
             || (request.resource.data.soldPrice is number
                 && request.resource.data.soldPrice >= 0));
 
-      // Kendi eklediği dropu düzeltebilir; yönetici hepsini yönetir.
       // farmId ve addedBy hiçbir durumda değişemez: aksi halde bir drop başka
       // bir farmın toplamına kaydırılabilir ya da başkasının adına yazılabilir.
-      allow update: if (isAdmin()
-          || (isActiveMember() && resource.data.addedBy == request.auth.uid))
+      allow update: if canManage()
         && request.resource.data.farmId == resource.data.farmId
         && request.resource.data.addedBy == resource.data.addedBy;
 
-      allow delete: if isAdmin()
-        || (isActiveMember() && resource.data.addedBy == request.auth.uid);
+      allow delete: if canManage();
     }
 
     // ---------------------------------------------------------------- payments
 
     match /payments/{paymentId} {
-      // Yönetici tüm ödeme geçmişini görür; üye yalnızca kendi kayıtlarını.
-      // Üye tarafından yapılan koleksiyon sorguları bu yüzden
-      // where("userId", "==", uid) filtresi içermek zorundadır.
-      allow read: if isAdmin()
-        || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow write: if isAdmin();
+      // Yönetici ve yardımcı tüm ödeme geçmişini görür; üye yalnızca kendi
+      // kayıtlarını. Üye sorguları bu yüzden where("userId","==",uid)
+      // filtresi içermek zorundadır.
+      allow read: if canManage()
+        || (hasAccess() && resource.data.userId == request.auth.uid);
+
+      // Para el değiştirdiğini beyan eden işlem yalnızca yöneticide.
+      allow create, update: if isAdmin();
+
+      // Yardımcı bir katılımcıyı farmdan çıkardığında onun ödeme kaydı da
+      // silinmek zorunda; aksi halde farmda olmayan birine ait kayıt kalır.
+      allow delete: if canManage();
     }
 
     // ---------------------------------------------------------------- settings
 
     match /settings/{docId} {
       // 'secrets' dokümanı Discord webhook adresini tutar: yalnızca yönetici.
-      allow read: if docId == 'secrets' ? isAdmin() : isSignedIn();
+      allow read: if docId == 'secrets' ? isAdmin() : hasAccess();
       allow write: if isAdmin();
     }
   }

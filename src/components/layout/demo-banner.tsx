@@ -1,18 +1,25 @@
 "use client";
 
-import { FlaskConical, RotateCcw, Shield, User } from "lucide-react";
+import { FlaskConical, RotateCcw, Shield, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/hooks/use-auth";
 import { demoReset } from "@/lib/demo/store";
 import { Button } from "@/components/ui/button";
+import type { UserRole } from "@/types";
+
+const DEMO_ROLES: { role: UserRole; label: string; icon: typeof Shield }[] = [
+  { role: "admin", label: "Yönetici", icon: Shield },
+  { role: "moderator", label: "Yardımcı", icon: Sparkles },
+  { role: "member", label: "Üye", icon: User },
+];
 
 /**
  * Demo modunda üstte görünen şerit: verinin gerçek olmadığını hatırlatır ve
- * yönetici/üye görünümleri arasında geçiş imkanı verir.
+ * üç rol görünümü arasında geçiş imkanı verir.
  */
 export function DemoBanner() {
-  const { isDemo, isAdmin, switchDemoRole } = useAuth();
+  const { isDemo, profile, switchDemoRole } = useAuth();
 
   if (!isDemo) return null;
 
@@ -27,22 +34,17 @@ export function DemoBanner() {
       </span>
 
       <div className="ms-auto flex items-center gap-1.5">
-        <Button
-          variant={isAdmin ? "secondary" : "ghost"}
-          size="xs"
-          onClick={() => switchDemoRole("admin")}
-        >
-          <Shield className="size-3" />
-          Yönetici
-        </Button>
-        <Button
-          variant={isAdmin ? "ghost" : "secondary"}
-          size="xs"
-          onClick={() => switchDemoRole("member")}
-        >
-          <User className="size-3" />
-          Üye
-        </Button>
+        {DEMO_ROLES.map(({ role, label, icon: Icon }) => (
+          <Button
+            key={role}
+            variant={profile?.role === role ? "secondary" : "ghost"}
+            size="xs"
+            onClick={() => switchDemoRole(role)}
+          >
+            <Icon className="size-3" />
+            {label}
+          </Button>
+        ))}
         <Button
           variant="ghost"
           size="xs"

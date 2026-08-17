@@ -45,7 +45,8 @@ function paymentDate(payment: Payment): Date {
 }
 
 export default function PaymentsPage() {
-  const { isAdmin } = useAuth();
+  // Yardımcı da tüm ödeme geçmişini görür; yalnızca işaretleme yetkisi yoktur.
+  const { canManage } = useAuth();
   const { data: payments, loading, error } = usePaymentHistory();
   const { data: users } = useUsers();
 
@@ -103,7 +104,7 @@ export default function PaymentsPage() {
       <PageHeader
         title="Ödemeler"
         description={
-          isAdmin
+          canManage
             ? "Klanda yapılan tüm ödemelerin kaydı: kime, hangi farm için, ne zaman."
             : "Sana yapılan ödemelerin kaydı."
         }
@@ -141,7 +142,7 @@ export default function PaymentsPage() {
         <CardContent
           className={cn(
             "grid gap-3 sm:grid-cols-2",
-            isAdmin ? "xl:grid-cols-4" : "xl:grid-cols-3"
+            canManage ? "xl:grid-cols-4" : "xl:grid-cols-3"
           )}
         >
           <div className="relative">
@@ -154,7 +155,7 @@ export default function PaymentsPage() {
             />
           </div>
 
-          {isAdmin && (
+          {canManage && (
             <Select value={userId} onValueChange={setUserId}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Oyuncu" />
@@ -211,8 +212,8 @@ export default function PaymentsPage() {
           title="Ödeme kaydı bulunamadı"
           description={
             payments.length === 0
-              ? isAdmin
-                ? "Bir farmın pay dağıtımından ödeme işaretlediğinde kayıtlar burada birikir."
+              ? canManage
+                ? "Bir farmın pay dağıtımından ödeme işaretlendiğinde kayıtlar burada birikir."
                 : "Sana yapılan bir ödeme henüz işaretlenmemiş."
               : "Filtrelere uyan kayıt yok."
           }
@@ -222,12 +223,12 @@ export default function PaymentsPage() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                {isAdmin && <TableHead>Oyuncu</TableHead>}
+                {canManage && <TableHead>Oyuncu</TableHead>}
                 <TableHead>Farm</TableHead>
                 <TableHead className="text-right">Tutar</TableHead>
                 <TableHead>Durum</TableHead>
                 <TableHead className="hidden sm:table-cell">Tarih</TableHead>
-                {isAdmin && <TableHead className="hidden lg:table-cell">İşaretleyen</TableHead>}
+                {canManage && <TableHead className="hidden lg:table-cell">İşaretleyen</TableHead>}
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
@@ -238,7 +239,7 @@ export default function PaymentsPage() {
 
                 return (
                   <TableRow key={payment.id}>
-                    {isAdmin && (
+                    {canManage && (
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-2.5">
                           <Avatar className="size-7">
@@ -271,7 +272,7 @@ export default function PaymentsPage() {
                       {formatDateTime(paymentDate(payment))}
                     </TableCell>
 
-                    {isAdmin && (
+                    {canManage && (
                       <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
                         {marker?.nickname || marker?.displayName || "-"}
                       </TableCell>

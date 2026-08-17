@@ -29,7 +29,7 @@ import type { Drop } from "@/types";
 const ALL = "all";
 
 export default function DropsPage() {
-  const { profile } = useAuth();
+  const { profile, canManage } = useAuth();
   const { data: drops, loading, error } = useDrops();
   const { data: farms } = useFarms();
   const { data: settings } = useSettings();
@@ -88,24 +88,38 @@ export default function DropsPage() {
     setDialogOpen(true);
   }
 
+  if (!canManage) {
+    return (
+      <div className="mx-auto w-full max-w-3xl pt-10">
+        <EmptyState
+          icon={Package}
+          title="Bu sayfa yardımcı ve yöneticilere açık"
+          description="Drop kayıtları klanın gelirini gösterdiği için yalnızca farm işleyen roller görür."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
         title="Droplar"
         description="Tüm farmlardan düşen itemler, satış fiyatları ve toplam değerleri."
         actions={
-          <Button
-            onClick={openCreate}
-            disabled={openFarms.length === 0}
-            title={
-              openFarms.length === 0 && farms.length > 0
-                ? "Drop eklenebilecek açık farm yok; tüm farmların ödemesi tamamlanmış."
-                : undefined
-            }
-          >
-            <Plus className="size-4" />
-            Drop ekle
-          </Button>
+          canManage && (
+            <Button
+              onClick={openCreate}
+              disabled={openFarms.length === 0}
+              title={
+                openFarms.length === 0 && farms.length > 0
+                  ? "Drop eklenebilecek açık farm yok; tüm farmların ödemesi tamamlanmış."
+                  : undefined
+              }
+            >
+              <Plus className="size-4" />
+              Drop ekle
+            </Button>
+          )
         }
       />
 
@@ -199,12 +213,14 @@ export default function DropsPage() {
           icon={Package}
           title="Drop bulunamadı"
           description={
-            drops.length === 0
-              ? "Henüz drop eklenmemiş. Bir farm seçip ilk dropu ekleyebilirsin."
-              : "Filtrelere uyan drop yok."
+            drops.length > 0
+              ? "Filtrelere uyan drop yok."
+              : canManage
+                ? "Henüz drop eklenmemiş. Bir farm seçip ilk dropu ekleyebilirsin."
+                : "Henüz drop eklenmemiş."
           }
           action={
-            openFarms.length > 0 ? (
+            canManage && openFarms.length > 0 ? (
               <Button size="sm" onClick={openCreate}>
                 <Plus className="size-4" />
                 Drop ekle

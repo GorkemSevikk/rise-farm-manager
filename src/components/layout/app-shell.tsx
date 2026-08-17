@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, Menu, Shield, Sparkles } from "lucide-react";
+import { Ban, Clock, Loader2, LogOut, Menu, Shield, Sparkles, UserRound } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings } from "@/hooks/use-data";
@@ -15,11 +15,12 @@ import { DemoBanner } from "@/components/layout/demo-banner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
+import type { AppUser } from "@/types";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, profile, loading, isAdmin } = useAuth();
+  const { isAuthenticated, profile, loading, isAdmin, canManage, hasAccess, signOut } = useAuth();
   const { data: settings } = useSettings();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -44,7 +45,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  // Onay bekleyen ya da askıya alınmış hesap panele hiç giremez. Asıl engel
+  // güvenlik kurallarındadır; buradaki kontrol kullanıcıya sebebini açıklar.
+  if (!hasAccess) {
+    return <AccessGate profile={profile} onSignOut={signOut} />;
+  }
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => (!item.adminOnly || isAdmin) && (!item.manageOnly || canManage)
+  );
   const clanName = settings.clanName || APP_NAME;
 
   return (
@@ -58,8 +67,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="border-t border-border/60 p-3">
           <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            {isAdmin ? <Shield className="size-3.5 text-primary" /> : <Sparkles className="size-3.5" />}
-            {isAdmin ? "Yönetici yetkisi aktif" : "Üye görünümü"}
+            {isAdmin ? (
+              <Shield className="size-3.5 text-primary" />
+            ) : canManage ? (
+              <Sparkles className="size-3.5 text-primary" />
+            ) : (
+              <UserRound className="size-3.5" />
+            )}
+            {isAdmin
+              ? "Yönetici yetkisi aktif"
+              : canManage
+                ? "Yardımcı yetkisi aktif"
+                : "Üye görünümü"}
           </div>
         </div>
       </aside>
@@ -99,7 +118,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 px-4 pt-5 pb-24 lg:px-6 lg:pb-8">{children}</main>
 
-        <MobileTabBar pathname={pathname} />
+        <MobileTabBar pathname={pathname} items={visibleItems.filter((item) => item.mobile)} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Onay bekleyen veya askıya alınmış hesaplar için tam ekran bilgi sayfası.
+ * Panelin hiçbir bölümü render edilmez.
+ */
+function AccessGate({
+  profile,
+  onSignOut,
+}: {
+  profile: AppUser;
+  onSignOut: () => Promise<void>;
+}) {
+  const waiting = !profile.approved;
+
+  return (
+    <div className="flex min-h-dvh items-center justify-center px-4">
+      <div className="w-full max-w-md space-y-5 rounded-2xl border border-border/60 bg-card p-6 text-center">
+        <span
+          className={cn(
+            "mx-auto flex size-12 items-center justify-center rounded-xl",
+            waiting ? "bg-[var(--warning)]/15 text-[var(--warning)]" : "bg-destructive/15 text-destructive"
+          )}
+        >
+          {waiting ? <Clock className="size-6" /> : <Ban className="size-6" />}
+        </span>
+
+        <div className="space-y-2">
+          <h1 className="font-heading text-lg font-semibold">
+            {waiting ? "Onay bekleniyor" : "Erişimin kapatıldı"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {waiting
+              ? "Başvurun yöneticiye iletildi. Klana kabul edildiğinde bu sayfa panele dönüşecek; tekrar giriş yapman gerekmez."
+              : "Hesabın yönetici tarafından askıya alındı. Bir hata olduğunu düşünüyorsan klan yöneticisiyle görüşebilirsin."}
+          </p>
+        </div>
+
+        <div className="rounded-lg bg-muted/40 px-3 py-2 text-left">
+          <p className="truncate text-sm font-medium">{profile.displayName}</p>
+          <p className="truncate text-xs text-muted-foreground">{profile.email}</p>
+        </div>
+
+        <Button variant="outline" size="sm" onClick={() => void onSignOut()}>
+          <LogOut className="size-4" />
+          Çıkış yap
+        </Button>
       </div>
     </div>
   );
@@ -151,12 +220,19 @@ function NavLink({
   );
 }
 
-function MobileTabBar({ pathname }: { pathname: string }) {
-  const items = NAV_ITEMS.filter((item) => item.mobile);
-
+function MobileTabBar({
+  pathname,
+  items,
+}: {
+  pathname: string;
+  items: (typeof NAV_ITEMS)[number][];
+}) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-background/95 backdrop-blur lg:hidden">
-      <ul className="grid grid-cols-5">
+      <ul
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${Math.max(items.length, 1)}, minmax(0, 1fr))` }}
+      >
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (

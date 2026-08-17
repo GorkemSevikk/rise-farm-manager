@@ -6,7 +6,14 @@
  * çevirir. Bu sayede bileşenler Firestore tiplerine bağımlı kalmaz.
  */
 
-export type UserRole = "admin" | "member";
+/**
+ * Yetki seviyeleri:
+ * - `admin`: her şeyi yapar; üyeleri onaylar, rolleri değiştirir, ödeme işaretler.
+ * - `moderator` (Yardımcı): farm ve drop işlemlerini yürütür; üye yönetimine,
+ *   ödeme işaretlemeye ve klan ayarlarına dokunamaz.
+ * - `member`: hiçbir kayıt oluşturamaz veya değiştiremez; yalnızca izler.
+ */
+export type UserRole = "admin" | "moderator" | "member";
 
 export type FarmStatus = "planned" | "active" | "completed" | "paid";
 
@@ -25,6 +32,12 @@ export interface AppUser {
   server: string;
   discord: string;
   role: UserRole;
+  /**
+   * Yönetici onayı verildi mi. Yeni kayıtlar `false` başlar ve onaylanana kadar
+   * hiçbir veriye erişemez. Alanı hiç bulunmayan eski kayıtlar onaylı sayılır.
+   */
+  approved: boolean;
+  /** Yönetici tarafından askıya alındı mı. Pasif kullanıcı da erişemez. */
   active: boolean;
   joinedAt: Date;
   updatedAt: Date;

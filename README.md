@@ -8,7 +8,9 @@ kaça satıldı, kim katıldı ve kim ne kadar hak etti — hepsi anlık olarak 
 ## Özellikler
 
 - **Google ile giriş** — İlk girişte Firestore'da profil otomatik oluşur.
-- **Rol yönetimi** — `admin` farm/drop/ödeme yönetir, `member` görüntüler.
+- **Onay akışı ve roller** — yeni Google girişleri yönetici onayı bekler.
+  `admin` her şeyi yönetir, `moderator` (Yardımcı) farm ve drop işler,
+  `member` yalnızca kendi payını görür; başkasının kazancı kapalıdır.
 - **Farm seansları** — Tarih, harita, saat, katılımcı ve not bilgisiyle kayıt.
 - **Parti yönetimi** — Katılımcı ekleme/çıkarma, pay yüzdeleri, tek tuşla eşit dağıtım.
 - **Drop takibi** — Item, kategori, adet, tahmini değer, gerçek satış fiyatı, satıcı,
@@ -79,7 +81,8 @@ src/
 ```
 users/{uid}
   displayName, email, photoURL, nickname, characterClass, server,
-  discord, role: "admin"|"member", active, joinedAt, updatedAt
+  discord, role: "admin"|"moderator"|"member", approved, active,
+  joinedAt, updatedAt
 
 farms/{farmId}
   title, mapName, date, startTime, endTime, notes,
@@ -192,8 +195,11 @@ firebase deploy --only firestore:rules,firestore:indexes,storage
 CLI kullanmak istemezsen `firestore.rules` ve `storage.rules` içeriğini Firebase
 Console'daki **Rules** sekmelerine kopyalayıp yapıştırman da yeterli.
 
-> **Not:** Bu listedeki e-posta ilk girişte otomatik `admin` olur. Diğer herkes
-> `member` başlar ve panelin **Üyeler** sayfasından yönetici yapılabilir.
+> **Not:** Bu listedeki e-posta ilk girişte otomatik `admin` olur ve onay
+> beklemez. Diğer herkes **onay bekleyen** `member` olarak başlar; panelin
+> **Üyeler** sayfasından onaylanır ve gerekirse yardımcı/yönetici yapılır.
+> Aynı e-posta listesini `firestore.rules` içindeki `isBootstrapAdmin`
+> fonksiyonuna da yazmalısın.
 
 ## 2. Ortam değişkenleri
 
@@ -279,17 +285,25 @@ Admin SDK ile isteği doğruladığı için hizmet hesabı değişkenleri zorunl
 
 ## Yetki matrisi
 
-| İşlem | Yönetici | Üye |
-| --- | --- | --- |
-| Farm/drop/kazanç görüntüleme | ✔ | ✔ |
-| Kendi profilini düzenleme | ✔ | ✔ |
-| Farm oluşturma / düzenleme / silme | ✔ | ✕ |
-| Katılımcı ekleme / çıkarma, pay değiştirme | ✔ | ✕ |
-| Drop ekleme | ✔ | ✔ |
-| Başkasının dropunu düzenleme / silme | ✔ | ✕ |
-| Ödeme durumu değiştirme | ✔ | ✕ |
-| Rol değiştirme, üyeyi pasife alma | ✔ | ✕ |
-| Klan ayarları ve webhook | ✔ | ✕ |
+Google ile ilk kez giriş yapan herkes **onay bekleyen** durumda başlar ve
+onaylanana kadar hiçbir veriyi göremez. Onayı yalnızca yönetici verir.
+Pasife alınan hesabın erişimi de tamamen kesilir.
+
+| İşlem | Yönetici | Yardımcı | Üye |
+| --- | --- | --- | --- |
+| Farm/drop/kazanç görüntüleme | Tümü | Tümü | Yalnızca kendi payı |
+| Drop listesi | ✔ | ✔ | ✕ |
+| Kendi profilini düzenleme | ✔ | ✔ | ✔ |
+| Farm oluşturma / düzenleme | ✔ | ✔ | ✕ |
+| Farm silme | ✔ | ✕ | ✕ |
+| Katılımcı ekleme / çıkarma, pay değiştirme | ✔ | ✔ | ✕ |
+| Drop ekleme / düzenleme / silme | ✔ | ✔ | ✕ |
+| Ödeme durumu değiştirme | ✔ | ✕ | ✕ |
+| Üye onaylama, rol değiştirme, pasife alma | ✔ | ✕ | ✕ |
+| Klan ayarları ve webhook | ✔ | ✕ | ✕ |
 
 Bu kurallar hem arayüzde hem `firestore.rules` içinde uygulanır; arayüzü atlayıp
-doğrudan Firestore'a istek atmak da mümkün değildir.
+doğrudan Firestore'a istek atmak da mümkün değildir. Pay hesabı tarayıcıda
+yapıldığı için farm dokümanlarına yazma yetkisi yalnızca yönetici ve yardımcıya
+verilir; üyelerin yazma yetkisi tamamen kapalı olduğundan kimse kendi payını
+yükseltemez.

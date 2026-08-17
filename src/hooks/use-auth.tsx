@@ -30,6 +30,12 @@ interface AuthContextValue {
   loading: boolean;
   error: string | null;
   isAdmin: boolean;
+  /** Yardımcı rolü: farm ve drop işlemlerini yapabilir. */
+  isModerator: boolean;
+  /** Kayıt oluşturup değiştirebilir mi (yönetici veya yardımcı). */
+  canManage: boolean;
+  /** Yönetici onayı verilmiş ve hesap askıya alınmamış mı. */
+  hasAccess: boolean;
   isConfigured: boolean;
   isDemo: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -173,6 +179,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       error,
       isAdmin: profile?.role === "admin",
+      isModerator: profile?.role === "moderator",
+      canManage: profile?.role === "admin" || profile?.role === "moderator",
+      hasAccess: Boolean(profile?.approved && profile?.active),
       isConfigured: isFirebaseConfigured,
       isDemo: isDemoMode,
       signInWithGoogle,

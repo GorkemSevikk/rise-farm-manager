@@ -19,16 +19,17 @@ import { formatGold, formatShortDate, initialsOf } from "@/lib/format";
 import { PageHeader } from "@/components/common/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { EmptyState } from "@/components/common/empty-state";
-import { FarmStatusBadge } from "@/components/common/status-badge";
+import { FarmStatusBadge, PaymentStatusBadge } from "@/components/common/status-badge";
 import { MonthlyEarningsChart, PlayerEarningsChart } from "@/components/charts/earnings-charts";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import type { Farm, PlayerEarning } from "@/types";
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, canManage } = useAuth();
   const { data: farms, loading: farmsLoading } = useFarms();
   const { data: drops, loading: dropsLoading } = useDrops();
 
@@ -36,7 +37,9 @@ export default function DashboardPage() {
     const totalGross = farms.reduce((sum, farm) => sum + farm.grossGold, 0);
     const totalNet = farms.reduce((sum, farm) => sum + farm.netGold, 0);
     const playerEarnings = buildPlayerEarningsFromFarms(farms);
-    const pendingGold = playerEarnings.reduce((sum, player) => sum + player.pendingGold, 0);
+    const pendingGold = canManage
+      ? playerEarnings.reduce((sum, player) => sum + player.pendingGold, 0)
+      : (playerEarnings.find((player) => player.userId === profile?.uid)?.pendingGold ?? 0);
     const monthly = buildMonthlyEarnings(farms);
     const topDrops = [...drops].sort((a, b) => dropTotal(b) - dropTotal(a)).slice(0, 5);
     const myEarning = playerEarnings.find((player) => player.userId === profile?.uid) ?? null;
@@ -51,10 +54,22 @@ export default function DashboardPage() {
       myEarning,
       bestPlayer: playerEarnings[0] ?? null,
     };
-  }, [farms, drops, profile?.uid]);
+  }, [farms, drops, profile?.uid, canManage]);
 
-  const loading = farmsLoading || dropsLoading;
+  const loading = farmsLoading || (canManage && dropsLoading);
   const recentFarms = farms.slice(0, 5);
+
+  if (!canManage) {
+    return (
+      <MemberDashboard
+        name={profile?.nickname || profile?.displayName?.split(" ")[0] || "oyuncu"}
+        loading={farmsLoading}
+        farms={farms}
+        uid={profile?.uid ?? ""}
+        myEarning={stats.myEarning}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -305,6 +320,109 @@ export default function DashboardPage() {
                     </div>
                   </Link>
                 ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberDashboard({
+  name,
+  loading,
+  farms,
+  uid,
+  myEarning,
+}: {
+  name: string;
+  loading: boolean;
+  farms: Farm[];
+  uid: string;
+  myEarning: PlayerEarning | null;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-4xl">
+      <PageHeader
+        title={`Hoş geldin, ${name}`}
+        description="Yalnızca senin payın ve ödeme durumun. Başka oyuncuların kazancı görünmez."
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/earnings">
+              Kazanç dökümü
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        }
+      />
+
+      {loading ? (
+        <DashboardSkeleton />
+      ) : (
+        <div className="space-y-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <StatCard
+              label="Katıldığın farm"
+              value={`${myEarning?.farmCount ?? farms.length}`}
+              icon={Swords}
+              tone="cyan"
+            />
+            <StatCard
+              label="Toplam payın"
+              value={formatGold(myEarning?.totalGold ?? 0)}
+              icon={Coins}
+              tone="gold"
+            />
+            <StatCard
+              label="Bekleyen alacağın"
+              value={formatGold(myEarning?.pendingGold ?? 0)}
+              hint="Yönetici ödeme işaretleyince düşer"
+              icon={Wallet}
+              tone="green"
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Farmların</CardTitle>
+              <CardDescription>Katıldığın seanslar ve senin payın</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {farms.length === 0 ? (
+                <EmptyState
+                  icon={Swords}
+                  title="Henüz bir farma katılmadın"
+                  description="Yönetici veya yardımcı seni bir seansa eklediğinde payın burada görünür."
+                />
+              ) : (
+                farms.slice(0, 8).map((farm) => {
+                  const share = farm.shares.find((item) => item.userId === uid);
+                  return (
+                    <Link
+                      key={farm.id}
+                      href={`/farms/${farm.id}`}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-muted/40"
+                    >
+                      <div className="min-w-0">
+                        <p className="flex items-center gap-2 truncate text-sm font-medium">
+                          {farm.title}
+                          <FarmStatusBadge status={farm.status} />
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {formatShortDate(farm.date)} · {farm.mapName || "Harita yok"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {share && <PaymentStatusBadge status={share.paymentStatus} />}
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {formatGold(share?.shareGold ?? 0)}
+                        </Badge>
+                        <ArrowRight className="size-4 text-muted-foreground" />
+                      </div>
+                    </Link>
+                  );
+                })
               )}
             </CardContent>
           </Card>

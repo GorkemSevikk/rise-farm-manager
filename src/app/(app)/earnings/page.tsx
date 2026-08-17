@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 const ALL = "all";
 
 export default function EarningsPage() {
-  const { profile } = useAuth();
+  const { profile, canManage } = useAuth();
   const { data: farms, loading } = useFarms();
   const { data: users } = useUsers();
 
@@ -66,8 +66,10 @@ export default function EarningsPage() {
     [scopedFarms]
   );
 
-  const selectedUserId = playerId === "me" ? profile?.uid ?? "" : playerId;
-  const selectedUser = users.find((user) => user.uid === selectedUserId);
+  const selectedUserId = !canManage || playerId === "me" ? profile?.uid ?? "" : playerId;
+  const selectedUser = canManage
+    ? users.find((user) => user.uid === selectedUserId)
+    : profile;
   const selected = leaderboard.find((player) => player.userId === selectedUserId) ?? null;
 
   const personalRows = useMemo(
@@ -85,22 +87,28 @@ export default function EarningsPage() {
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         title="Kazançlar"
-        description="Oyuncu bazlı pay dökümü ve ödeme durumu."
+        description={
+          canManage
+            ? "Oyuncu bazlı pay dökümü ve ödeme durumu."
+            : "Yalnızca senin farm payların. Başka oyuncuların kazancı görünmez."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Select value={playerId} onValueChange={setPlayerId}>
-              <SelectTrigger className="w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="me">Kendi kazancım</SelectItem>
-                {users.map((user) => (
-                  <SelectItem key={user.uid} value={user.uid}>
-                    {user.nickname || user.displayName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {canManage && (
+              <Select value={playerId} onValueChange={setPlayerId}>
+                <SelectTrigger className="w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="me">Kendi kazancım</SelectItem>
+                  {users.map((user) => (
+                    <SelectItem key={user.uid} value={user.uid}>
+                      {user.nickname || user.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             <Select value={month} onValueChange={setMonth}>
               <SelectTrigger className="w-40">
@@ -224,6 +232,7 @@ export default function EarningsPage() {
             </CardContent>
           </Card>
 
+          {canManage && (
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -282,6 +291,7 @@ export default function EarningsPage() {
               </CardContent>
             </Card>
           </div>
+          )}
         </div>
       )}
     </div>

@@ -77,6 +77,31 @@ export function subscribeFarms(
   );
 }
 
+/** Üyenin yalnızca katıldığı farmları dinler; güvenlik kuralları bunu zorunlu kılar. */
+export function subscribeMyFarms(
+  userId: string,
+  callback: (farms: Farm[]) => void,
+  onError?: (error: Error) => void
+) {
+  if (isDemoMode) {
+    return demoSubscribe(
+      () => demoFarms().filter((farm) => farm.participantIds.includes(userId)),
+      callback
+    );
+  }
+
+  const farmsQuery = query(
+    farmsCollection(),
+    where("participantIds", "array-contains", userId),
+    orderBy("date", "desc")
+  );
+  return onSnapshot(
+    farmsQuery,
+    (snapshot) => callback(snapshot.docs.map((docSnapshot) => docSnapshot.data())),
+    (error) => onError?.(error)
+  );
+}
+
 export function subscribeFarm(
   farmId: string,
   callback: (farm: Farm | null) => void,

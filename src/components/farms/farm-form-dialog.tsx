@@ -77,7 +77,11 @@ export function FarmFormDialog({ open, onOpenChange, farm }: FarmFormDialogProps
   const [participants, setParticipants] = useState<ParticipantSelection[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
+  // Onay bekleyen veya askıya alınmış kişiler farma eklenemez.
+  const activeUsers = useMemo(
+    () => users.filter((user) => user.approved && user.active),
+    [users]
+  );
   const isEdit = Boolean(farm);
 
   // Formun hangi kayıt için doldurulduğunu tutar.

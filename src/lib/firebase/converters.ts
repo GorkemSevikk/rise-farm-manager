@@ -62,7 +62,13 @@ export const userConverter: FirestoreDataConverter<AppUser> = {
       characterClass: str(data.characterClass),
       server: str(data.server),
       discord: str(data.discord),
-      role: data.role === "admin" ? "admin" : "member",
+      role:
+        data.role === "admin" || data.role === "moderator" || data.role === "member"
+          ? data.role
+          : "member",
+      // Alanı olmayan eski kayıtlar onaylı sayılır; aksi halde onay akışı
+      // devreye girdiğinde mevcut üyelerin tamamı dışarıda kalırdı.
+      approved: data.approved !== false,
       active: data.active !== false,
       joinedAt: toDate(data.joinedAt),
       updatedAt: toDate(data.updatedAt),
