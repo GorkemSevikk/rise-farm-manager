@@ -38,7 +38,7 @@ service cloud.firestore {
     function isBootstrapAdmin() {
       return isSignedIn()
         && request.auth.token.email in [
-          'ornek@gmail.com'
+          'gorkemsevik2001@gmail.com'
         ];
     }
 
@@ -106,19 +106,38 @@ service cloud.firestore {
       // Aktif üyeler drop ekleyebilir; kayıt kendi adına oluşturulmak zorunda.
       allow create: if isActiveMember()
         && request.resource.data.addedBy == request.auth.uid
+        && request.resource.data.farmId is string
+        && request.resource.data.farmId.size() > 0
+        && request.resource.data.itemName is string
+        && request.resource.data.itemName.size() > 0
         && request.resource.data.quantity is int
         && request.resource.data.quantity > 0
-        && request.resource.data.estimatedValue >= 0;
+        && request.resource.data.estimatedValue is number
+        && request.resource.data.estimatedValue >= 0
+        && (request.resource.data.soldPrice == null
+            || (request.resource.data.soldPrice is number
+                && request.resource.data.soldPrice >= 0));
 
       // Kendi eklediği dropu düzeltebilir; yönetici hepsini yönetir.
-      allow update, delete: if isAdmin()
+      // farmId ve addedBy hiçbir durumda değişemez: aksi halde bir drop başka
+      // bir farmın toplamına kaydırılabilir ya da başkasının adına yazılabilir.
+      allow update: if (isAdmin()
+          || (isActiveMember() && resource.data.addedBy == request.auth.uid))
+        && request.resource.data.farmId == resource.data.farmId
+        && request.resource.data.addedBy == resource.data.addedBy;
+
+      allow delete: if isAdmin()
         || (isActiveMember() && resource.data.addedBy == request.auth.uid);
     }
 
     // ---------------------------------------------------------------- payments
 
     match /payments/{paymentId} {
-      allow read: if isSignedIn();
+      // Yönetici tüm ödeme geçmişini görür; üye yalnızca kendi kayıtlarını.
+      // Üye tarafından yapılan koleksiyon sorguları bu yüzden
+      // where("userId", "==", uid) filtresi içermek zorundadır.
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow write: if isAdmin();
     }
 

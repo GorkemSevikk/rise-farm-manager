@@ -75,6 +75,46 @@ export default function DashboardPage() {
         <DashboardSkeleton />
       ) : (
         <div className="space-y-6">
+          {stats.myEarning && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
+                <div className="flex items-center gap-3">
+                  <Avatar className="size-10">
+                    <AvatarImage src={stats.myEarning.photoURL ?? undefined} />
+                    <AvatarFallback>{initialsOf(stats.myEarning.name)}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <p className="text-sm font-medium">Senin payın</p>
+                    <p className="text-xs text-muted-foreground">
+                      {stats.myEarning.farmCount} farma katıldın
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-6">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Toplam kazanç</p>
+                    <p className="font-mono text-base text-primary">
+                      {formatGold(stats.myEarning.totalGold)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Bekleyen alacağın</p>
+                    <p className="font-mono text-base text-[var(--chart-2)]">
+                      {formatGold(stats.myEarning.pendingGold)}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/earnings">
+                      Detay
+                      <ArrowRight className="size-3.5" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label="Toplam farm"
@@ -127,8 +167,8 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Ayın yıldızı</CardTitle>
-                <CardDescription>En çok kazanan oyuncu</CardDescription>
+                <CardTitle>Klan lideri</CardTitle>
+                <CardDescription>Tüm zamanların en çok kazanan oyuncusu</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {stats.bestPlayer ? (

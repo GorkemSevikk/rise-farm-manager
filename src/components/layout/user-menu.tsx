@@ -34,7 +34,11 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-9 gap-2 pr-2 pl-1.5">
+        <Button
+          variant="ghost"
+          className="h-9 gap-2 pr-2 pl-1.5"
+          aria-label={`${label} kullanıcı menüsü`}
+        >
           <Avatar className="size-7">
             <AvatarImage src={profile.photoURL ?? undefined} alt={label} />
             <AvatarFallback className="text-[11px]">{initialsOf(label)}</AvatarFallback>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import {
   Area,
   AreaChart,
@@ -80,15 +81,21 @@ export function MonthlyEarningsChart({ data }: { data: MonthlyEarning[] }) {
     "Net dağıtım": month.net,
   }));
 
+  // Gradient id'leri sabit olursa aynı sayfada iki grafik render edildiğinde
+  // SVG tanımları çakışır ve ikinci grafik yanlış dolguyu kullanır.
+  const uid = useId().replace(/:/g, "");
+  const grossGradientId = `grossGradient-${uid}`;
+  const netGradientId = `netGradient-${uid}`;
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <defs>
-          <linearGradient id="grossGradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={grossGradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={CHART_COLORS[0]} stopOpacity={0.5} />
             <stop offset="100%" stopColor={CHART_COLORS[0]} stopOpacity={0.02} />
           </linearGradient>
-          <linearGradient id="netGradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={netGradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={CHART_COLORS[1]} stopOpacity={0.4} />
             <stop offset="100%" stopColor={CHART_COLORS[1]} stopOpacity={0.02} />
           </linearGradient>
@@ -108,14 +115,14 @@ export function MonthlyEarningsChart({ data }: { data: MonthlyEarning[] }) {
           dataKey="Brüt gelir"
           stroke={CHART_COLORS[0]}
           strokeWidth={2}
-          fill="url(#grossGradient)"
+          fill={`url(#${grossGradientId})`}
         />
         <Area
           type="monotone"
           dataKey="Net dağıtım"
           stroke={CHART_COLORS[1]}
           strokeWidth={2}
-          fill="url(#netGradient)"
+          fill={`url(#${netGradientId})`}
         />
       </AreaChart>
     </ResponsiveContainer>

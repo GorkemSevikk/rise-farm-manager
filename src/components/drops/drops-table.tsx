@@ -42,9 +42,20 @@ interface DropsTableProps {
   drops: Drop[];
   showFarmColumn?: boolean;
   onEdit?: (drop: Drop) => void;
+  /**
+   * Ödemesi kapatılmış farmların kimlikleri. Bu farmlara ait droplar
+   * düzenlenemez ve silinemez; aksi halde paylar değişir ama katılımcılar
+   * "ödendi" göründüğü için fark kimseye yansımaz.
+   */
+  lockedFarmIds?: ReadonlySet<string>;
 }
 
-export function DropsTable({ drops, showFarmColumn = true, onEdit }: DropsTableProps) {
+export function DropsTable({
+  drops,
+  showFarmColumn = true,
+  onEdit,
+  lockedFarmIds,
+}: DropsTableProps) {
   const { profile, isAdmin } = useAuth();
   const [pendingDelete, setPendingDelete] = useState<Drop | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -83,7 +94,8 @@ export function DropsTable({ drops, showFarmColumn = true, onEdit }: DropsTableP
           </TableHeader>
           <TableBody>
             {drops.map((drop) => {
-              const canManage = isAdmin || drop.addedBy === profile?.uid;
+              const farmLocked = lockedFarmIds?.has(drop.farmId) ?? false;
+              const canManage = !farmLocked && (isAdmin || drop.addedBy === profile?.uid);
               const unit = drop.soldPrice ?? drop.estimatedValue;
 
               return (

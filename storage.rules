@@ -8,15 +8,26 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    match /drops/{farmId}/{fileName} {
+    // Yeni düzen: drops/{farmId}/{uid}/{dosya}
+    // uid segmenti dosyanın sahibini belirler.
+    match /drops/{farmId}/{uid}/{fileName} {
       allow read: if isSignedIn();
 
+      // Kullanıcı yalnızca kendi klasörüne yazabilir.
       // En fazla 5 MB ve yalnızca görsel yüklenebilir.
       allow create: if isSignedIn()
+        && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
 
-      allow delete: if isSignedIn();
+      // Dosyayı yalnızca sahibi silebilir.
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Eski düzende (drops/{farmId}/{uid}-{zaman}.uzanti) yüklenmiş dosyalar
+    // görünür kalsın; bu yola yeni yazma yapılmaz.
+    match /drops/{farmId}/{fileName} {
+      allow read: if isSignedIn();
     }
 
     match /{allPaths=**} {

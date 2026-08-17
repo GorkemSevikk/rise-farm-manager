@@ -101,7 +101,15 @@ export function demoPayments(): Payment[] {
 }
 
 export function demoSettings(): AppSettings {
-  return state.settings;
+  // Kopya döndürülür: doğrudan referans verilirse tüketen kod diziyi yerinde
+  // değiştirip store'u emit() tetiklenmeden bozabilir.
+  return {
+    ...state.settings,
+    maps: [...state.settings.maps],
+    itemCategories: [...state.settings.itemCategories],
+    servers: [...state.settings.servers],
+    characterClasses: [...state.settings.characterClasses],
+  };
 }
 
 export function demoWebhookUrl(): string {
@@ -229,6 +237,12 @@ export function demoRemoveParticipant(farmId: string, userId: string) {
   state.participants[farmId] = (state.participants[farmId] ?? []).filter(
     (item) => item.userId !== userId
   );
+
+  // Gerçek servisle aynı davranış: çıkarılan oyuncunun ödeme kaydı da silinir.
+  state.payments = state.payments.filter(
+    (payment) => !(payment.farmId === farmId && payment.userId === userId)
+  );
+
   demoRecalculateFarm(farmId);
 }
 
@@ -306,6 +320,18 @@ export function demoSetPaymentStatus(
   );
 
   upsertPayment(farm, participant, status, actor);
+
+  // Gerçek servisle aynı davranış: farm durumu ödeme tablosuyla tutarlı kalır.
+  const current = state.participants[farmId] ?? [];
+  const allPaid = current.length > 0 && current.every((item) => item.paymentStatus === "paid");
+
+  if (allPaid || farm.status === "paid") {
+    const nextStatus = allPaid ? "paid" : "completed";
+    state.farms = state.farms.map((item) =>
+      item.id === farmId ? { ...item, status: nextStatus } : item
+    );
+  }
+
   demoRecalculateFarm(farmId);
 }
 
@@ -349,7 +375,13 @@ export function demoSaveWebhookUrl(url: string) {
 /** Toplamları ve payları gerçek hesaplama fonksiyonlarıyla yeniden üretir. */
 export function demoRecalculateFarm(farmId: string) {
   const farm = demoFarm(farmId);
-  if (!farm) return;
+
+  // Farm bulunamasa bile abonelere haber verilir: çağıran fonksiyonlar bu
+  // noktaya gelmeden önce drop veya katılımcı listesini değiştirmiş olabilir.
+  if (!farm) {
+    emit();
+    return;
+  }
 
   const drops = state.drops.filter((drop) => drop.farmId === farmId);
   const participants = state.participants[farmId] ?? [];

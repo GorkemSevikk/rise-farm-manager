@@ -22,7 +22,9 @@ export async function uploadDropScreenshot(file: File, farmId: string, uid: stri
   }
 
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "png";
-  const path = `drops/${farmId}/${uid}-${Date.now()}.${extension}`;
+  // Yükleyen kullanıcı yola klasör olarak yazılır; Storage kuralları sahipliği
+  // bu segmentten doğrular, böylece kimse başkasının dosyasını silemez.
+  const path = `drops/${farmId}/${uid}/${Date.now()}.${extension}`;
   const storageRef = ref(storage, path);
 
   await uploadBytes(storageRef, file, { contentType: file.type });

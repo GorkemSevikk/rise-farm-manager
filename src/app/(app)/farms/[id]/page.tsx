@@ -110,6 +110,11 @@ export default function FarmDetailPage() {
     );
   }
 
+  // Ödemesi kapatılmış bir farma yeni drop eklenirse paylar yeniden hesaplanır
+  // ama katılımcılar "ödendi" göründüğü için oluşan fark kimseye yansımaz.
+  // Bu yüzden farm ödendi durumundayken drop girişi kapatılır.
+  const locked = farm.status === "paid";
+
   const soldGold = drops
     .filter((drop) => drop.status === "sold")
     .reduce((sum, drop) => sum + dropTotal(drop), 0);
@@ -150,7 +155,15 @@ export default function FarmDetailPage() {
         description={`${formatDate(farm.date)} · Oluşturan: ${farm.createdByName || "-"}`}
         actions={
           <>
-            <Button onClick={openCreateDrop}>
+            <Button
+              onClick={openCreateDrop}
+              disabled={locked}
+              title={
+                locked
+                  ? "Ödemesi tamamlanan farma drop eklenemez. Önce bir ödemeyi geri alın."
+                  : undefined
+              }
+            >
               <Plus className="size-4" />
               Drop ekle
             </Button>
@@ -237,14 +250,21 @@ export default function FarmDetailPage() {
           <TabsTrigger value="notes">Notlar</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="drops" className="pt-4">
+        <TabsContent value="drops" className="space-y-3 pt-4">
+          {locked && (
+            <p className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Bu farmın ödemeleri tamamlandı, drop listesi kilitli. Değişiklik gerekiyorsa pay
+              dağıtımı sekmesinden bir ödemeyi bekleyene çevirin.
+            </p>
+          )}
+
           {drops.length === 0 ? (
             <EmptyState
               icon={Package}
               title="Bu farmda henüz drop yok"
               description="Seans sırasında düşen itemleri ekle; toplamlar ve paylar anında güncellenir."
               action={
-                <Button size="sm" onClick={openCreateDrop}>
+                <Button size="sm" onClick={openCreateDrop} disabled={locked}>
                   <Plus className="size-4" />
                   İlk dropu ekle
                 </Button>
@@ -254,6 +274,7 @@ export default function FarmDetailPage() {
             <DropsTable
               drops={drops}
               showFarmColumn={false}
+              lockedFarmIds={locked ? new Set([farm.id]) : undefined}
               onEdit={(drop) => {
                 setEditingDrop(drop);
                 setDropOpen(true);

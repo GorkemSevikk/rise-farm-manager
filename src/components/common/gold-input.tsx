@@ -50,7 +50,9 @@ export function GoldInput({
         className={cn("pr-14 font-mono tracking-tight", className)}
         onChange={(event) => {
           const raw = event.target.value;
-          const parsed = parseGoldInput(raw);
+          // Altın tutarı negatif olamaz; parseGoldInput eksi işaretini kabul
+          // ettiği için burada sınırlandırıyoruz.
+          const parsed = Math.max(0, parseGoldInput(raw));
           setText(raw.trim() === "" ? "" : formatNumber(parsed));
           onChange(parsed);
         }}

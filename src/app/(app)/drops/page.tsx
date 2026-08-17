@@ -60,6 +60,16 @@ export default function DropsPage() {
     });
   }, [drops, search, farmId, category, status]);
 
+  // Ödemesi kapatılmış farmlara yeni drop eklenemez ve mevcut dropları
+  // değiştirilemez; aksi halde paylar değişir ama katılımcılar "ödendi"
+  // göründüğü için oluşan fark kimseye yansımaz.
+  const lockedFarmIds = useMemo(
+    () => new Set(farms.filter((farm) => farm.status === "paid").map((farm) => farm.id)),
+    [farms]
+  );
+
+  const openFarms = useMemo(() => farms.filter((farm) => farm.status !== "paid"), [farms]);
+
   const totals = useMemo(() => {
     const total = filtered.reduce((sum, drop) => sum + dropTotal(drop), 0);
     const sold = filtered
@@ -84,7 +94,15 @@ export default function DropsPage() {
         title="Droplar"
         description="Tüm farmlardan düşen itemler, satış fiyatları ve toplam değerleri."
         actions={
-          <Button onClick={openCreate} disabled={farms.length === 0}>
+          <Button
+            onClick={openCreate}
+            disabled={openFarms.length === 0}
+            title={
+              openFarms.length === 0 && farms.length > 0
+                ? "Drop eklenebilecek açık farm yok; tüm farmların ödemesi tamamlanmış."
+                : undefined
+            }
+          >
             <Plus className="size-4" />
             Drop ekle
           </Button>
@@ -186,7 +204,7 @@ export default function DropsPage() {
               : "Filtrelere uyan drop yok."
           }
           action={
-            farms.length > 0 ? (
+            openFarms.length > 0 ? (
               <Button size="sm" onClick={openCreate}>
                 <Plus className="size-4" />
                 Drop ekle
@@ -195,13 +213,13 @@ export default function DropsPage() {
           }
         />
       ) : (
-        <DropsTable drops={filtered} onEdit={openEdit} />
+        <DropsTable drops={filtered} onEdit={openEdit} lockedFarmIds={lockedFarmIds} />
       )}
 
       <DropFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        farms={farms}
+        farms={openFarms}
         drop={editing}
       />
     </div>

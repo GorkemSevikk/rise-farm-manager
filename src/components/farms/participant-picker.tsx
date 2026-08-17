@@ -123,9 +123,15 @@ export function ParticipantPicker({
                       max={100}
                       step="0.5"
                       value={selection?.sharePercent ?? 0}
-                      onChange={(event) =>
-                        setPercent(user.uid, Number(event.target.value) || 0)
-                      }
+                      onChange={(event) => {
+                        // min/max nitelikleri klavyeyle yazılan değeri
+                        // sınırlamaz; 150 veya -20 girilebiliyordu.
+                        const raw = Number(event.target.value);
+                        const clamped = Number.isFinite(raw)
+                          ? Math.min(100, Math.max(0, raw))
+                          : 0;
+                        setPercent(user.uid, clamped);
+                      }}
                       onClick={(event) => event.preventDefault()}
                       className="pr-6 text-right font-mono"
                     />

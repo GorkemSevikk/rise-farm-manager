@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useSettings, useUsers } from "@/hooks/use-data";
 import { createFarm, updateFarm } from "@/services/farms";
-import { equalPercentages } from "@/lib/profit";
+import { equalPercentages, totalPercent } from "@/lib/profit";
 import { fromDateInputValue, toDateInputValue } from "@/lib/format";
 import { FARM_STATUS_LABELS } from "@/lib/constants";
 import {
@@ -80,8 +80,21 @@ export function FarmFormDialog({ open, onOpenChange, farm }: FarmFormDialogProps
   const activeUsers = useMemo(() => users.filter((user) => user.active), [users]);
   const isEdit = Boolean(farm);
 
+  // Formun hangi kayıt için doldurulduğunu tutar.
+  const initializedFor = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedFor.current = null;
+      return;
+    }
+
+    // Form yalnızca dialog açıldığında doldurulur. Aksi halde canlı Firestore
+    // güncellemeleri (yeni drop eklenmesi, değişen toplamlar) farm nesnesini
+    // yenileyip kullanıcının o an yazdıklarını silerdi.
+    const key = farm?.id ?? "new";
+    if (initializedFor.current === key) return;
+    initializedFor.current = key;
 
     if (farm) {
       setForm({
@@ -115,16 +128,28 @@ export function FarmFormDialog({ open, onOpenChange, farm }: FarmFormDialogProps
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!profile) return;
+    // `saving` kontrolü çift gönderimi engeller: buton devre dışı kalsa da
+    // Enter ile art arda gönderim aynı farmı iki kez oluşturabilir.
+    if (!profile || saving) return;
 
     if (!form.title.trim()) {
       toast.error("Farm adı zorunlu.");
       return;
     }
 
-    if (!isEdit && participants.length === 0) {
-      toast.error("En az bir katılımcı seçmelisin.");
-      return;
+    if (!isEdit) {
+      if (participants.length === 0) {
+        toast.error("En az bir katılımcı seçmelisin.");
+        return;
+      }
+
+      // Paylar %100'e tamamlanmazsa net altın oyunculara eksik ya da fazla
+      // dağıtılır. Uyarı zaten gösteriliyordu ama kayda engel değildi.
+      const total = totalPercent(participants);
+      if (Math.abs(total - 100) >= 0.01) {
+        toast.error(`Pay yüzdeleri toplamı %100 olmalı. Şu an %${total}.`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -152,6 +177,14 @@ export function FarmFormDialog({ open, onOpenChange, farm }: FarmFormDialogProps
           .filter((item): item is { user: (typeof activeUsers)[number]; sharePercent: number } =>
             Boolean(item)
           );
+
+        // Seçim yapıldıktan sonra bir oyuncu pasifleştirilmiş olabilir. Sessizce
+        // listeden düşürmek yerine uyarıyoruz; aksi halde paylar %100'ün altına
+        // iner ve eksik katılımcıyla farm oluşur.
+        if (selected.length !== participants.length) {
+          toast.error("Seçili oyunculardan biri artık aktif değil. Listeyi güncelle.");
+          return;
+        }
 
         const farmId = await createFarm({ input, participants: selected, author: profile });
         toast.success("Farm oluşturuldu.");

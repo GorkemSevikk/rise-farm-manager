@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ interface TagListEditorProps {
 /** Ayarlar sayfasındaki serbest liste alanları (harita, kategori, sunucu) */
 export function TagListEditor({ label, values, onChange, placeholder }: TagListEditorProps) {
   const [draft, setDraft] = useState("");
+  const inputId = useId();
 
   function add() {
     const value = draft.trim();
@@ -32,9 +33,10 @@ export function TagListEditor({ label, values, onChange, placeholder }: TagListE
 
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={inputId}>{label}</Label>
       <div className="flex gap-2">
         <Input
+          id={inputId}
           value={draft}
           placeholder={placeholder}
           onChange={(event) => setDraft(event.target.value)}

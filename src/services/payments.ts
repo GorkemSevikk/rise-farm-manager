@@ -2,10 +2,12 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  where,
   writeBatch,
 } from "firebase/firestore";
 
@@ -42,7 +44,7 @@ export function subscribePayments(
 }
 
 /** Ödeme kaydı kimliği: aynı farm + oyuncu için tek kayıt tutulur. */
-function paymentId(farmId: string, userId: string) {
+export function paymentId(farmId: string, userId: string) {
   return `${farmId}_${userId}`;
 }
 
@@ -65,6 +67,12 @@ export async function setPaymentStatus(options: {
     return;
   }
 
+  const paymentRef = doc(db, COLLECTIONS.payments, paymentId(farm.id, participant.userId));
+  // `createdAt` yalnızca ilk kayıtta yazılmalı. Merge ile her çağrıda
+  // serverTimestamp() gönderilirse kaydın oluşturulma zamanı kaybolur ve
+  // ödeme geçmişi sıralaması bozulur.
+  const existingPayment = await getDoc(paymentRef);
+
   const batch = writeBatch(db);
 
   batch.update(
@@ -81,13 +89,27 @@ export async function setPaymentStatus(options: {
     share.userId === participant.userId ? { ...share, paymentStatus: status } : share
   );
 
-  batch.update(doc(db, COLLECTIONS.farms, farm.id), {
+  const farmUpdate: Record<string, unknown> = {
     shares: updatedShares,
     updatedAt: serverTimestamp(),
-  });
+  };
+
+  // Farm durumu ödeme tablosuyla tutarlı kalsın: son bekleyen ödeme de
+  // tamamlandığında "paid" olur, tamamlanmış bir ödeme geri alındığında
+  // "paid" durumunda takılı kalmaz.
+  const allPaid =
+    updatedShares.length > 0 && updatedShares.every((share) => share.paymentStatus === "paid");
+
+  if (allPaid) {
+    farmUpdate.status = "paid";
+  } else if (farm.status === "paid") {
+    farmUpdate.status = "completed";
+  }
+
+  batch.update(doc(db, COLLECTIONS.farms, farm.id), farmUpdate);
 
   batch.set(
-    doc(db, COLLECTIONS.payments, paymentId(farm.id, participant.userId)),
+    paymentRef,
     {
       farmId: farm.id,
       farmTitle: farm.title,
@@ -98,7 +120,7 @@ export async function setPaymentStatus(options: {
       note,
       markedBy: actor.uid,
       paidAt: status === "paid" ? serverTimestamp() : null,
-      createdAt: serverTimestamp(),
+      ...(existingPayment.exists() ? {} : { createdAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -114,6 +136,13 @@ export async function markAllPaid(farm: Farm, participants: FarmParticipant[], a
     return;
   }
 
+  // Bu farm için hangi ödeme kayıtlarının zaten var olduğunu tek sorguyla
+  // öğreniyoruz; böylece mevcut kayıtların createdAt değeri ezilmez.
+  const existingSnapshot = await getDocs(
+    query(collection(db, COLLECTIONS.payments), where("farmId", "==", farm.id))
+  );
+  const existingIds = new Set(existingSnapshot.docs.map((docSnapshot) => docSnapshot.id));
+
   const batch = writeBatch(db);
 
   participants.forEach((participant) => {
@@ -126,8 +155,10 @@ export async function markAllPaid(farm: Farm, participants: FarmParticipant[], a
       }
     );
 
+    const id = paymentId(farm.id, participant.userId);
+
     batch.set(
-      doc(db, COLLECTIONS.payments, paymentId(farm.id, participant.userId)),
+      doc(db, COLLECTIONS.payments, id),
       {
         farmId: farm.id,
         farmTitle: farm.title,
@@ -138,7 +169,7 @@ export async function markAllPaid(farm: Farm, participants: FarmParticipant[], a
         note: "",
         markedBy: actor.uid,
         paidAt: serverTimestamp(),
-        createdAt: serverTimestamp(),
+        ...(existingIds.has(id) ? {} : { createdAt: serverTimestamp() }),
         updatedAt: serverTimestamp(),
       },
       { merge: true }

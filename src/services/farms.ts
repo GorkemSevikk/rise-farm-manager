@@ -17,10 +17,14 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase/client";
-import { farmConverter, participantConverter } from "@/lib/firebase/converters";
+import {
+  dropConverter,
+  farmConverter,
+  participantConverter,
+} from "@/lib/firebase/converters";
 import { COLLECTIONS } from "@/lib/constants";
 import { calculateFarmTotals, distributeShares } from "@/lib/profit";
-import { dropConverter } from "@/lib/firebase/converters";
+import { paymentId } from "@/services/payments";
 import { isDemoMode } from "@/lib/demo/mode";
 import {
   demoAddParticipant,
@@ -216,16 +220,32 @@ export async function deleteFarm(farmId: string) {
     return;
   }
 
-  const [participants, drops] = await Promise.all([
+  const [participants, drops, payments] = await Promise.all([
     getDocs(participantsCollection(farmId)),
     getDocs(query(collection(db, COLLECTIONS.drops), where("farmId", "==", farmId))),
+    getDocs(query(collection(db, COLLECTIONS.payments), where("farmId", "==", farmId))),
   ]);
 
-  const batch = writeBatch(db);
-  participants.forEach((participant) => batch.delete(participant.ref));
-  drops.forEach((drop) => batch.delete(drop.ref));
-  batch.delete(doc(db, COLLECTIONS.farms, farmId));
-  await batch.commit();
+  // Farklı dönüştürücülere sahip referansları tek tipte toplamak yerine
+  // yollarını kullanıyoruz; batch.delete için sade referans yeterli.
+  const paths = [
+    ...participants.docs.map((docSnapshot) => docSnapshot.ref.path),
+    ...drops.docs.map((docSnapshot) => docSnapshot.ref.path),
+    ...payments.docs.map((docSnapshot) => docSnapshot.ref.path),
+  ];
+
+  // Firestore tek batch'te en fazla 500 işlem kabul eder. Çok droplu bir farm
+  // bu sınırı aşabileceği için silmeyi parçalara bölüyoruz.
+  const CHUNK_SIZE = 450;
+  for (let index = 0; index < paths.length; index += CHUNK_SIZE) {
+    const batch = writeBatch(db);
+    paths.slice(index, index + CHUNK_SIZE).forEach((path) => batch.delete(doc(db, path)));
+    await batch.commit();
+  }
+
+  // Alt kayıtlar temizlendikten sonra farm dokümanı silinir; işlem yarıda
+  // kalırsa farm hâlâ görünür olur ve tekrar denenebilir.
+  await deleteDoc(doc(db, COLLECTIONS.farms, farmId));
 }
 
 export async function addParticipant(farmId: string, user: AppUser, sharePercent: number) {
@@ -258,6 +278,14 @@ export async function removeParticipant(farmId: string, userId: string) {
   }
 
   await deleteDoc(doc(db, COLLECTIONS.farms, farmId, COLLECTIONS.farmParticipants, userId));
+
+  // Katılımcı çıkarıldığında ödeme kaydı da silinir. Aksi halde ödeme
+  // geçmişinde farma artık dahil olmayan bir oyuncu görünür ve aynı kişi
+  // tekrar eklendiğinde eski "ödendi" kaydı yeni payla çelişir.
+  await deleteDoc(doc(db, COLLECTIONS.payments, paymentId(farmId, userId))).catch(() => {
+    // Ödeme kaydı hiç oluşmamış olabilir; bu bir hata değil.
+  });
+
   await recalculateFarm(farmId);
 }
 
